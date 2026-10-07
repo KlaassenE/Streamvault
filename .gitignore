@@ -1,0 +1,16 @@
+node_modules/
+.next/
+data/
+.demo-library/
+.env*
+!.env.example
+*.tsbuildinfo
+
+# Local OS files, databases, backups and logs
+.DS_Store
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+backups/
+*.log

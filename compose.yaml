@@ -1,0 +1,16 @@
+services:
+  streamvault:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      STREAMVAULT_DATA_DIR: /data
+      STREAMVAULT_ALLOWED_ROOTS: /library
+      STREAMVAULT_SECURE_COOKIE: ${STREAMVAULT_SECURE_COOKIE:-false}
+      STREAMVAULT_PUBLIC_ORIGIN: ${STREAMVAULT_PUBLIC_ORIGIN:-}
+    volumes:
+      - streamvault-data:/data
+      - ${MEDIA_DIRECTORY:?Set MEDIA_DIRECTORY to the existing video folder}:/library:ro
+volumes:
+  streamvault-data:
