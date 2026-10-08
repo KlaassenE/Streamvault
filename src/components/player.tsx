@@ -26,7 +26,6 @@ type Props = {
   chapters: Chapter[];
   subtitles: Subtitle[];
   preferredLanguage: string;
-  backgroundAudio: boolean;
   singlePlayback: boolean;
   autoStart?: boolean;
   explicitStart?: boolean;
@@ -294,7 +293,7 @@ export function Player(props: Props) {
     };
     const onPause = () => {
       setPlaying(false);
-      if (!document.hidden) wanted.current = false;
+      wanted.current = false;
       if (!document.hidden) setAnimation({ kind: "pause", id: Date.now() });
       setControls(true);
       lastTick.current = null;
@@ -349,6 +348,7 @@ export function Player(props: Props) {
     const suspend = () => {
       if (
         !document.hidden ||
+        !v.paused ||
         document.pictureInPictureElement === v ||
         !v.getAttribute("src")
       )
@@ -377,11 +377,7 @@ export function Player(props: Props) {
       if (document.hidden) {
         hiddenAt.current = Date.now();
         save(false, true);
-        const pip = document.pictureInPictureElement === v;
-        const continueAudio = latest.current.backgroundAudio && !v.paused;
-        if (!pip && !continueAudio) {
-          wanted.current = !v.paused;
-          v.pause();
+        if (v.paused && document.pictureInPictureElement !== v) {
           suspendTimer.current = setTimeout(
             suspend,
             suspensionDelay(hiddenAt.current || Date.now(), Date.now()),

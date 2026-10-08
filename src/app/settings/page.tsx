@@ -50,11 +50,6 @@ export default async function Settings() {
               ["auto_start", "Automatically play opened videos", false],
               ["autoplay", "Play the next video automatically", false],
               [
-                "background_audio",
-                "Keep audio playing in background tabs",
-                false,
-              ],
-              [
                 "single_playback",
                 "Pause other Streamvault tabs when playing",
                 true,

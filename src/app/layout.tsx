@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: { default: "Streamvault", template: "%s · Streamvault" },
+  title: { default: "Streamvault", template: "%s | Streamvault" },
   description:
     "Your own video library. Familiar interests, new discoveries, and a place to pick up where you left off.",
 };

@@ -68,7 +68,6 @@ export async function updatePreferences(form: FormData) {
   const allowed = [
     "appearance",
     "preferred_language",
-    "background_audio",
     "autoplay",
     "auto_start",
     "single_playback",

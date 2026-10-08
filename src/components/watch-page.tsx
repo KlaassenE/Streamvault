@@ -77,7 +77,6 @@ export async function WatchPage({
                 chapters,
                 subtitles,
                 preferredLanguage: preferred,
-                backgroundAudio: prefs.background_audio === "true",
                 singlePlayback: prefs.single_playback !== "false",
               }}
               autoplay={prefs.autoplay === "true"}

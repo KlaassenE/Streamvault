@@ -159,6 +159,10 @@ test(
     assert.equal(response.status, 200);
     const html = await response.text();
     assert.ok(html.includes("player-shell"));
+    assert.ok(
+      html.includes(" | Streamvault</title>"),
+      "watch tab title includes the video title and site name",
+    );
     const legacy = await get("/watch/youtube%3Ademo-0?t=12&autoplay=1", {
       redirect: "manual",
     });
