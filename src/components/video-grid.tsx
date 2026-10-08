@@ -1,4 +1,5 @@
 "use client";
+import { channelHref } from "@/lib/channel-slug";
 import { watchHref } from "@/lib/video-url";
 import Link from "next/link";
 import {
@@ -140,7 +141,7 @@ function Card({
         </h3>
         <div className="card-meta">
           <Link
-            href={`/channel/${encodeURIComponent(video.channel_id)}`}
+            href={channelHref(video.channel_slug || video.channel_id)}
             prefetch={false}
           >
             {video.channel}

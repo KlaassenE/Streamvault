@@ -9,6 +9,7 @@ export type VideoCard = {
   title: string;
   channel_id: string;
   channel: string;
+  channel_slug?: string;
   duration: number;
   published_at: number | null;
   added_at: number;

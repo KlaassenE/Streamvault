@@ -1,3 +1,5 @@
+import { ensureChannelSlug } from "./channels";
+import { isShort } from "./shorts";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
@@ -319,6 +321,7 @@ export async function scanLibrary(rootId: string, jobId?: string) {
           number(m.channel_follower_count) ||
             number(channelMetadata?.channel_follower_count),
         );
+        ensureChannelSlug(channelId, channelName);
         const previousChannel = one<{ channel_id: string }>(
           "SELECT channel_id FROM videos WHERE id=?",
           id,
@@ -364,6 +367,11 @@ export async function scanLibrary(rootId: string, jobId?: string) {
           item.mtime,
           text(m.live_status),
           text(m.availability),
+        );
+        run(
+          "UPDATE videos SET is_short=? WHERE id=?",
+          isShort(m, item.media || item.basename) ? 1 : 0,
+          id,
         );
         const fps = number(m.fps);
         run(

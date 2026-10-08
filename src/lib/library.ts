@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { all, one, run, transaction, now } from "./db";
 import type { VideoCard, Video, Comment } from "./types";
 
-const cards = `SELECT v.id,v.title,v.channel_id,c.name AS channel,v.duration,v.published_at,v.added_at,v.available,CASE WHEN v.thumbnail_path IS NULL THEN 0 ELSE 1 END AS thumbnail,COALESCE(p.seconds,0) AS seconds,COALESCE(p.completed,0) AS completed FROM videos v JOIN channels c ON c.id=v.channel_id LEFT JOIN watch_progress p ON p.video_id=v.id AND p.user_id=?`;
+const cards = `SELECT v.id,v.title,v.channel_id,c.name AS channel,c.slug AS channel_slug,v.duration,v.published_at,v.added_at,v.available,CASE WHEN v.thumbnail_path IS NULL THEN 0 ELSE 1 END AS thumbnail,COALESCE(p.seconds,0) AS seconds,COALESCE(p.completed,0) AS completed FROM videos v JOIN channels c ON c.id=v.channel_id LEFT JOIN watch_progress p ON p.video_id=v.id AND p.user_id=?`;
 export function videoById(id: string, userId: string) {
   return one<Video>(
     `${cards.replace(" FROM videos", `,v.fps,v.description,v.imported_views,v.imported_likes,(SELECT COUNT(*) FROM video_likes WHERE video_id=v.id) AS local_likes,EXISTS(SELECT 1 FROM video_likes WHERE user_id=? AND video_id=v.id) AS liked,EXISTS(SELECT 1 FROM watch_later WHERE user_id=? AND video_id=v.id) AS saved,EXISTS(SELECT 1 FROM subscriptions WHERE user_id=? AND channel_id=v.channel_id) AS subscribed FROM videos`)} WHERE v.id=? AND v.archived=0`,
@@ -15,7 +15,7 @@ export function videoById(id: string, userId: string) {
 }
 export function resumeVideos(userId: string) {
   return all<VideoCard>(
-    `${cards} WHERE v.archived=0 AND v.available=1 AND p.completed=0 AND p.seconds>15 AND v.duration-p.seconds>30 AND p.updated_at>? ORDER BY p.updated_at DESC LIMIT 4`,
+    `${cards} WHERE v.archived=0 AND v.available=1 AND v.is_short=0 AND p.completed=0 AND p.seconds>15 AND v.duration-p.seconds>30 AND p.updated_at>? ORDER BY p.updated_at DESC LIMIT 4`,
     userId,
     now() - 90 * 86400000,
   );
@@ -25,6 +25,7 @@ export function collection(
   kind: string,
   offset = 0,
   channel?: string,
+  format = "videos",
 ) {
   const conditions: Record<string, string> = {
     history: "p.updated_at IS NOT NULL",
@@ -42,7 +43,7 @@ export function collection(
       ? [channel || ""]
       : [];
   return all<VideoCard>(
-    `${cards} WHERE v.archived=0 AND ${condition} ORDER BY ${kind === "history" ? "p.updated_at" : "COALESCE(v.published_at,v.added_at)"} DESC,v.id LIMIT 24 OFFSET ?`,
+    `${cards} WHERE v.archived=0 AND ${condition} ${kind === "channel" ? `AND v.is_short=${format === "shorts" ? 1 : 0}` : ""} ORDER BY ${kind === "history" ? "p.updated_at" : "COALESCE(v.published_at,v.added_at)"} DESC,v.id LIMIT 24 OFFSET ?`,
     userId,
     ...extra,
     offset,
@@ -177,7 +178,7 @@ export function feed(
 ) {
   if (filter === "Recently added") {
     const items = all<VideoCard>(
-      `${cards} WHERE v.archived=0 AND v.available=1 AND v.id<>? AND NOT EXISTS(SELECT 1 FROM feedback f WHERE f.user_id=? AND (f.kind='video' AND f.target_id=v.id OR f.kind='channel' AND f.target_id=v.channel_id)) ORDER BY v.added_at DESC,v.id LIMIT 25 OFFSET ?`,
+      `${cards} WHERE v.archived=0 AND v.available=1 ${currentId ? "" : "AND v.is_short=0"} AND v.id<>? AND NOT EXISTS(SELECT 1 FROM feedback f WHERE f.user_id=? AND (f.kind='video' AND f.target_id=v.id OR f.kind='channel' AND f.target_id=v.channel_id)) ORDER BY v.added_at DESC,v.id LIMIT 25 OFFSET ?`,
       userId,
       currentId || "",
       userId,
@@ -192,7 +193,14 @@ export function feed(
     one<{ value: string }>(
       "SELECT value FROM settings WHERE key='index_revision'",
     )?.value || "0";
-  const key = JSON.stringify([userId, seed, filter, currentId, revision]);
+  const key = JSON.stringify([
+    "shorts-filter-v1",
+    userId,
+    seed,
+    filter,
+    currentId,
+    revision,
+  ]);
   const cached = cache.get(key);
   if (cached && (cached.expires > now() || offset > 0))
     return feedPage(userId, cached.values, offset, filter, currentId);
@@ -228,13 +236,13 @@ export function feed(
   history.forEach((row) => interests.set(row.label, Math.log1p(row.weight)));
   // Bound the pool and response. Include recent, resume, liked, subscribed, and deterministic samples from older files.
   const pool = all<VideoCard>(
-    `${cards} WHERE v.archived=0 AND v.available=1 AND v.id<>? AND NOT EXISTS(SELECT 1 FROM feedback f WHERE f.user_id=? AND (f.kind='video' AND f.target_id=v.id OR f.kind='channel' AND f.target_id=v.channel_id)) ORDER BY CASE WHEN p.seconds>15 AND p.completed=0 THEN 0 ELSE 1 END, v.added_at DESC LIMIT 400`,
+    `${cards} WHERE v.archived=0 AND v.available=1 ${currentId ? "" : "AND v.is_short=0"} AND v.id<>? AND NOT EXISTS(SELECT 1 FROM feedback f WHERE f.user_id=? AND (f.kind='video' AND f.target_id=v.id OR f.kind='channel' AND f.target_id=v.channel_id)) ORDER BY CASE WHEN p.seconds>15 AND p.completed=0 THEN 0 ELSE 1 END, v.added_at DESC LIMIT 400`,
     userId,
     currentId || "",
     userId,
   );
   const old = all<VideoCard>(
-    `${cards} WHERE v.archived=0 AND v.available=1 AND v.id<>? AND NOT EXISTS(SELECT 1 FROM feedback f WHERE f.user_id=? AND (f.kind='video' AND f.target_id=v.id OR f.kind='channel' AND f.target_id=v.channel_id)) ORDER BY v.id LIMIT 150 OFFSET ?`,
+    `${cards} WHERE v.archived=0 AND v.available=1 ${currentId ? "" : "AND v.is_short=0"} AND v.id<>? AND NOT EXISTS(SELECT 1 FROM feedback f WHERE f.user_id=? AND (f.kind='video' AND f.target_id=v.id OR f.kind='channel' AND f.target_id=v.channel_id)) ORDER BY v.id LIMIT 150 OFFSET ?`,
     userId,
     currentId || "",
     userId,
@@ -249,7 +257,7 @@ export function feed(
     ),
   );
   const relevant = all<VideoCard>(
-    `${cards} WHERE v.archived=0 AND v.available=1 AND v.id<>? AND (EXISTS(SELECT 1 FROM subscriptions s WHERE s.user_id=? AND s.channel_id=v.channel_id) OR EXISTS(SELECT 1 FROM video_likes k WHERE k.user_id=? AND k.video_id=v.id) OR EXISTS(SELECT 1 FROM video_labels l WHERE l.video_id=v.id AND l.label IN (SELECT value FROM json_each(?)))) AND NOT EXISTS(SELECT 1 FROM feedback f WHERE f.user_id=? AND (f.kind='video' AND f.target_id=v.id OR f.kind='channel' AND f.target_id=v.channel_id)) ORDER BY COALESCE(p.completed,0),v.published_at DESC LIMIT 120`,
+    `${cards} WHERE v.archived=0 AND v.available=1 ${currentId ? "" : "AND v.is_short=0"} AND v.id<>? AND (EXISTS(SELECT 1 FROM subscriptions s WHERE s.user_id=? AND s.channel_id=v.channel_id) OR EXISTS(SELECT 1 FROM video_likes k WHERE k.user_id=? AND k.video_id=v.id) OR EXISTS(SELECT 1 FROM video_labels l WHERE l.video_id=v.id AND l.label IN (SELECT value FROM json_each(?)))) AND NOT EXISTS(SELECT 1 FROM feedback f WHERE f.user_id=? AND (f.kind='video' AND f.target_id=v.id OR f.kind='channel' AND f.target_id=v.channel_id)) ORDER BY COALESCE(p.completed,0),v.published_at DESC LIMIT 120`,
     userId,
     currentId || "",
     userId,
@@ -363,7 +371,7 @@ function feedPage(
   const tail =
     selected.length < 24
       ? all<VideoCard>(
-          `${cards} WHERE v.available=1 AND v.archived=0 AND v.id<>? AND v.id NOT IN (SELECT value FROM json_each(?)) AND NOT EXISTS(SELECT 1 FROM feedback f WHERE f.user_id=? AND (f.kind='video' AND f.target_id=v.id OR f.kind='channel' AND f.target_id=v.channel_id)) ${condition} ORDER BY v.added_at DESC,v.id LIMIT ? OFFSET ?`,
+          `${cards} WHERE v.available=1 AND v.archived=0 ${currentId ? "" : "AND v.is_short=0"} AND v.id<>? AND v.id NOT IN (SELECT value FROM json_each(?)) AND NOT EXISTS(SELECT 1 FROM feedback f WHERE f.user_id=? AND (f.kind='video' AND f.target_id=v.id OR f.kind='channel' AND f.target_id=v.channel_id)) ${condition} ORDER BY v.added_at DESC,v.id LIMIT ? OFFSET ?`,
           userId,
           currentId || "",
           JSON.stringify(values.map((v) => v.id)),
@@ -444,4 +452,24 @@ export function saveProgress(
       time,
     );
   });
+}
+
+export function searchChannels(userId: string, query: string) {
+  const terms = query.trim().split(/\s+/).filter(Boolean).slice(0, 10);
+  if (!terms.length) return [];
+  const conditions = terms.map(() => "c.name LIKE ? ESCAPE '\\'").join(" AND ");
+  const values = terms.map(
+    (term) => `%${term.replace(/[\\%_]/g, (char) => "\\" + char)}%`,
+  );
+  return all<{
+    id: string;
+    name: string;
+    slug: string;
+    avatar_path: string | null;
+    avatar_url: string | null;
+    video_count: number;
+  }>(
+    `SELECT c.id,c.name,c.slug,c.avatar_path,c.avatar_url,(SELECT COUNT(*) FROM videos WHERE channel_id=c.id AND archived=0) AS video_count FROM channels c WHERE ${conditions} AND EXISTS(SELECT 1 FROM videos WHERE channel_id=c.id AND archived=0) ORDER BY c.name LIMIT 24`,
+    ...values,
+  );
 }

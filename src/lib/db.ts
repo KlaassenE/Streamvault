@@ -1,3 +1,4 @@
+import { slugBase } from "./channel-slug";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
@@ -75,6 +76,40 @@ export function database() {
         .some((row) => row.name === column)
     )
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`);
+  }
+  if (
+    !db
+      .prepare("PRAGMA table_info(videos)")
+      .all()
+      .some((row) => row.name === "is_short")
+  )
+    db.exec(
+      "ALTER TABLE videos ADD COLUMN is_short INTEGER NOT NULL DEFAULT 0",
+    );
+  if (
+    !db
+      .prepare("PRAGMA table_info(channels)")
+      .all()
+      .some((row) => row.name === "slug")
+  )
+    db.exec("ALTER TABLE channels ADD COLUMN slug TEXT");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS channel_slug ON channels(slug)");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    for (const row of db
+      .prepare("SELECT id,name FROM channels WHERE slug IS NULL ORDER BY id")
+      .all()) {
+      const base = slugBase(String(row.name));
+      let slug = base,
+        suffix = 2;
+      while (db.prepare("SELECT id FROM channels WHERE slug=?").get(slug))
+        slug = `${base}-${suffix++}`;
+      db.prepare("UPDATE channels SET slug=? WHERE id=?").run(slug, row.id);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
   }
   globalDatabase.streamvaultDatabase = db;
   return db;

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { channelHref } from "@/lib/channel-slug";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { all } from "@/lib/db";
@@ -24,8 +25,8 @@ export default async function Collection({
   const items = collection(user.id, kind);
   const channels =
     kind === "subscriptions"
-      ? all<{ id: string; name: string; n: number }>(
-          "SELECT c.id,c.name,(SELECT COUNT(*) FROM videos WHERE channel_id=c.id AND archived=0) AS n FROM channels c JOIN subscriptions s ON s.channel_id=c.id WHERE s.user_id=? ORDER BY c.name",
+      ? all<{ id: string; name: string; slug: string; n: number }>(
+          "SELECT c.id,c.name,c.slug,(SELECT COUNT(*) FROM videos WHERE channel_id=c.id AND archived=0) AS n FROM channels c JOIN subscriptions s ON s.channel_id=c.id WHERE s.user_id=? ORDER BY c.name",
           user.id,
         )
       : [];
@@ -42,7 +43,7 @@ export default async function Collection({
           {channels.map((c) => (
             <Link
               className="channel-item"
-              href={`/channel/${encodeURIComponent(c.id)}`}
+              href={channelHref(c.slug || c.id)}
               prefetch={false}
               key={c.id}
             >

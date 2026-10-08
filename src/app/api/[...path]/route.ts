@@ -55,6 +55,7 @@ export async function GET(
         url.searchParams.get("kind") || "library",
         offset,
         url.searchParams.get("channel") || undefined,
+        url.searchParams.get("format") || "videos",
       );
       return json({ items, next: items.length === 24 ? offset + 24 : null });
     }

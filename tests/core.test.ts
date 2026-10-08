@@ -578,3 +578,95 @@ test("watch URLs expose source IDs while preserving internal state keys", async 
   assert.equal(internalVideoId("4GnCipXbxJg"), "youtube:4GnCipXbxJg");
   assert.equal(internalVideoId("youtube:4GnCipXbxJg"), "youtube:4GnCipXbxJg");
 });
+
+test("channel slugs stay stable, shorts are separated and excluded from home pagination, and channels are searchable", async () => {
+  const { collection, searchChannels } = await import("../src/lib/library");
+  const { isShort } = await import("../src/lib/shorts");
+  assert.equal(
+    isShort({ duration: 30, width: 1920, height: 1080 }, "/videos/brief.mp4"),
+    false,
+  );
+  assert.equal(
+    isShort(
+      { original_url: "https://www.youtube.com/shorts/example" },
+      "/videos/example.mp4",
+    ),
+    true,
+  );
+  const archive = path.join(temporary, "format-fixtures");
+  await mkdir(archive);
+  const formatRoot = await addRoot(archive, "Formats");
+  for (const [id, channel_id, extra] of [
+    ["format-long", "format-a", { duration: 30, width: 1920, height: 1080 }],
+    ["format-short", "format-a", { duration: 45, width: 1080, height: 1920 }],
+    ["format-collision", "format-b", { duration: 600 }],
+  ] as const) {
+    await writeFile(
+      path.join(archive, id + ".info.json"),
+      JSON.stringify({
+        id,
+        channel_id,
+        channel: "A New Channel!",
+        title: id,
+        ...extra,
+      }),
+    );
+    await writeFile(path.join(archive, id + ".mp4"), "test media");
+  }
+  await scanLibrary(formatRoot);
+  const slugA = one<{ slug: string }>(
+    "SELECT slug FROM channels WHERE id='youtube:format-a'",
+  )!.slug;
+  const slugB = one<{ slug: string }>(
+    "SELECT slug FROM channels WHERE id='youtube:format-b'",
+  )!.slug;
+  assert.notEqual(slugA, slugB);
+  assert.equal(
+    collection(user, "channel", 0, "youtube:format-a", "videos")[0].id,
+    "youtube:format-long",
+  );
+  assert.equal(
+    collection(user, "channel", 0, "youtube:format-a", "shorts")[0].id,
+    "youtube:format-short",
+  );
+  assert.equal(searchChannels(user, "new channel").length, 2);
+  assert.equal(
+    searchChannels(user, "%").length,
+    0,
+    "SQL wildcard characters must be literal search terms",
+  );
+  for (const filter of [
+    "For you",
+    "New to you",
+    "Continue watching",
+    "Recently added",
+  ]) {
+    let offset: number | null = 0;
+    while (offset !== null) {
+      const page = feed(user, "short-exclusion", filter, offset);
+      assert.ok(
+        page.items.every((video) => video.id !== "youtube:format-short"),
+      );
+      offset = page.next;
+    }
+  }
+  await writeFile(
+    path.join(archive, "format-long.info.json"),
+    JSON.stringify({
+      id: "format-long",
+      channel_id: "format-a",
+      channel: "Renamed channel",
+      title: "Updated normal video",
+      duration: 30,
+      width: 1920,
+      height: 1080,
+    }),
+  );
+  await scanLibrary(formatRoot);
+  assert.equal(
+    one<{ slug: string }>(
+      "SELECT slug FROM channels WHERE id='youtube:format-a'",
+    )!.slug,
+    slugA,
+  );
+});

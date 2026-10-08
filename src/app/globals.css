@@ -1781,3 +1781,30 @@ textarea::placeholder {
   color: var(--muted);
   opacity: 1;
 }
+
+.feed-tabs a {
+  padding: 12px 0;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+.feed-tabs a[aria-current="page"] {
+  color: var(--foreground);
+  border-bottom-color: var(--foreground);
+}
+.search-channels {
+  margin-bottom: 28px;
+}
+.search-channels h2 {
+  margin-bottom: 16px;
+}
+.search-channel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.search-video-heading {
+  margin-bottom: 16px;
+}
+.channel-hero .watch-description {
+  margin: 16px 0 0;
+}

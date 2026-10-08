@@ -191,3 +191,47 @@ test(
     assert.notEqual(seed(first), seed(second));
   },
 );
+
+test(
+  "channel names resolve, legacy links redirect, descriptions collapse and search includes channels",
+  { skip: !enabled },
+  async () => {
+    const { one, run } = await import("../src/lib/db");
+    const channel = one<{
+      id: string;
+      name: string;
+      slug: string;
+      description: string;
+    }>(
+      "SELECT c.id,c.name,c.slug,c.description FROM channels c WHERE EXISTS(SELECT 1 FROM videos WHERE channel_id=c.id AND archived=0) LIMIT 1",
+    )!;
+    const original = channel.description;
+    run(
+      "UPDATE channels SET description=? WHERE id=?",
+      "Channel description regression check",
+      channel.id,
+    );
+    try {
+      const response = await get(`/channel/${channel.slug}`);
+      assert.equal(response.status, 200);
+      const html = await response.text();
+      assert.ok(html.includes('data-expanded="false"'));
+      assert.ok(html.includes('aria-label="Channel videos"'));
+      assert.ok(html.includes("?tab=shorts"));
+      const legacy = await get(
+        `/channel/${encodeURIComponent(channel.id)}?tab=shorts`,
+        { redirect: "manual" },
+      );
+      assert.equal(legacy.status, 308);
+      assert.equal(
+        legacy.headers.get("location"),
+        `/channel/${channel.slug}?tab=shorts`,
+      );
+      const search = await get(`/search?q=${encodeURIComponent(channel.name)}`);
+      assert.equal(search.status, 200);
+      assert.ok((await search.text()).includes("search-channels"));
+    } finally {
+      run("UPDATE channels SET description=? WHERE id=?", original, channel.id);
+    }
+  },
+);

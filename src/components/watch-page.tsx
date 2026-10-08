@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { channelHref } from "@/lib/channel-slug";
 import { playbackStart } from "@/lib/playback-policy";
 import { notFound } from "next/navigation";
 
@@ -94,7 +95,7 @@ export async function WatchPage({
                 <span className="avatar">{video.channel[0]}</span>
                 <div>
                   <Link
-                    href={`/channel/${encodeURIComponent(video.channel_id)}`}
+                    href={channelHref(video.channel_slug || video.channel_id)}
                     prefetch={false}
                   >
                     {video.channel}
